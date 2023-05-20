@@ -6,26 +6,19 @@ set -euxo pipefail
 
 # Variable Declaration
 
-# DNS Setting
-if [ ! -d /etc/systemd/resolved.conf.d ]; then
-	sudo mkdir /etc/systemd/resolved.conf.d/
-fi
-cat <<EOF | sudo tee /etc/systemd/resolved.conf.d/dns_servers.conf
-[Resolve]
-DNS=${DNS_SERVERS}
-EOF
-
-sudo systemctl restart systemd-resolved
+KUBERNETES_VERSION="1.23.6-00"
 
 # disable swap
 sudo swapoff -a
 
-# keeps the swap off during reboot
+# keeps the swaf off during reboot
 (crontab -l 2>/dev/null; echo "@reboot /sbin/swapoff -a") | crontab - || true
 sudo apt-get update -y
 # Install CRI-O Runtime
 
-VERSION="$(echo ${KUBERNETES_VERSION} | grep -oE '[0-9]+\.[0-9]+')"
+OS="xUbuntu_20.04"
+
+VERSION="1.23"
 
 # Create the .conf file to load the modules at bootup
 cat <<EOF | sudo tee /etc/modules-load.d/crio.conf
@@ -52,15 +45,26 @@ cat <<EOF | sudo tee /etc/apt/sources.list.d/devel:kubic:libcontainers:stable:cr
 deb http://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable:/cri-o:/$VERSION/$OS/ /
 EOF
 
-curl -L https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable:/cri-o:/$VERSION/$OS/Release.key | sudo apt-key --keyring /etc/apt/trusted.gpg.d/libcontainers.gpg add -
+curl -L https://download.opensuse.org/repositories/devel:kubic:libcontainers:stable:cri-o:$VERSION/$OS/Release.key | sudo apt-key --keyring /etc/apt/trusted.gpg.d/libcontainers.gpg add -
 curl -L https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/$OS/Release.key | sudo apt-key --keyring /etc/apt/trusted.gpg.d/libcontainers.gpg add -
 
 sudo apt-get update
-sudo apt-get install cri-o cri-o-runc -y
+#sudo apt-get install cri-o cri-o-runc -y
 
-cat >> /etc/default/crio << EOF
-${ENVIRONMENT}
-EOF
+export DEBIAN_FRONTEND=noninteractive 
+apt-get update \
+    && apt-get install -y \
+        apt-transport-https \
+        ca-certificates \
+        curl \
+        software-properties-common \
+    && curl -fsSL https://download.docker.com/linux/ubuntu/gpg | apt-key add - \
+    && add-apt-repository \
+        "deb https://download.docker.com/linux/$(. /etc/os-release; echo "$ID") \
+        $(lsb_release -cs) \
+        stable" \
+    && apt-get update \
+    && apt-get install -y docker-ce=$(apt-cache madison docker-ce | grep 18.06 | head -1 | awk '{print $3}')
 sudo systemctl daemon-reload
 sudo systemctl enable crio --now
 
@@ -79,5 +83,4 @@ sudo apt-get install -y jq
 local_ip="$(ip --json a s | jq -r '.[] | if .ifname == "eth1" then .addr_info[] | if .family == "inet" then .local else empty end else empty end')"
 cat > /etc/default/kubelet << EOF
 KUBELET_EXTRA_ARGS=--node-ip=$local_ip
-${ENVIRONMENT}
 EOF
