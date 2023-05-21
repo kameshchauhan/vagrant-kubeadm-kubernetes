@@ -49,8 +49,22 @@ curl -L https://download.opensuse.org/repositories/devel:kubic:libcontainers:sta
 curl -L https://download.opensuse.org/repositories/devel:/kubic:/libcontainers:/stable/$OS/Release.key | sudo apt-key --keyring /etc/apt/trusted.gpg.d/libcontainers.gpg add -
 
 sudo apt-get update
-sudo apt-get install cri-o cri-o-runc -y
+#sudo apt-get install cri-o cri-o-runc -y
 
+export DEBIAN_FRONTEND=noninteractive 
+apt-get update \
+    && apt-get install -y \
+        apt-transport-https \
+        ca-certificates \
+        curl \
+        software-properties-common \
+    && curl -fsSL https://download.docker.com/linux/ubuntu/gpg | apt-key add - \
+    && add-apt-repository \
+        "deb https://download.docker.com/linux/$(. /etc/os-release; echo "$ID") \
+        $(lsb_release -cs) \
+        stable" \
+    && apt-get update \
+    && apt-get install -y docker-ce=$(apt-cache madison docker-ce | grep 18.06 | head -1 | awk '{print $3}')
 sudo systemctl daemon-reload
 sudo systemctl enable crio --now
 
